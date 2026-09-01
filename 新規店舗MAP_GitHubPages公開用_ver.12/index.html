@@ -1,0 +1,1098 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>新規店舗MAP</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="theme-color" content="#1b1f23">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="新規店舗MAP">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+<style>
+  :root {
+    --ink: #1b1f23;
+    --paper: #fbfaf8;
+    --panel: #ffffff;
+    --line: #e3ded4;
+    --existing: #3457d5;
+    --todo: #d64545;
+    --approach: #e0a52c;
+    --nego: #e07b1f;
+    --won: #2f9e5c;
+    --excluded: #9aa0a6;
+    --muted: #857f73;
+    --accent: #a8531f;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: "Hiragino Sans", "Yu Gothic", "Segoe UI", sans-serif;
+    background: var(--paper);
+    color: var(--ink);
+    display: flex;
+    flex-direction: column;
+    font-size: 14px;
+  }
+  header {
+    padding: calc(14px + env(safe-area-inset-top)) calc(22px + env(safe-area-inset-right)) 14px calc(22px + env(safe-area-inset-left));
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+    background: var(--panel);
+  }
+  header h1 {
+    font-size: 16px;
+    margin: 0;
+    letter-spacing: 0.02em;
+  }
+  header .sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .layout { flex: 1; display: flex; min-height: 0; }
+  #sidebar {
+    width: 300px;
+    border-right: 1px solid var(--line);
+    padding: 18px 18px calc(18px + env(safe-area-inset-bottom)) calc(18px + env(safe-area-inset-left));
+    overflow-y: auto;
+    background: var(--panel);
+  }
+  #sidebar section { margin-bottom: 22px; }
+  #sidebar h2 {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    margin: 0 0 10px;
+  }
+  .upload-box {
+    border: 1px dashed var(--line);
+    border-radius: 8px;
+    padding: 12px;
+    font-size: 12px;
+  }
+  .upload-box .status { margin-top: 6px; color: var(--muted); }
+  .upload-box .status.ok { color: var(--won); font-weight: 600; }
+  .file-label {
+    display: inline-block;
+    padding: 6px 12px;
+    background: var(--ink);
+    color: white;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+  }
+  .file-label input { display: none; }
+  .hint { font-size: 11px; color: var(--muted); margin-top: 6px; line-height: 1.5; }
+  button.secondary {
+    font-size: 12px;
+    background: none;
+    border: 1px solid var(--line);
+    padding: 5px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    color: var(--ink);
+  }
+  button.secondary:hover { background: #f2efe8; }
+  .filter-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 4px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  .filter-row:hover { background: #f2efe8; }
+  .filter-row input { accent-color: var(--ink); }
+  .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .count { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12px; }
+  .divider { height: 1px; background: var(--line); margin: 14px 0; }
+  .store-list-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    cursor: pointer;
+    font-size: 13px;
+    border-bottom: 1px solid var(--line);
+  }
+  .store-list-row:last-child { border-bottom: none; }
+  .store-list-row:hover { background: #f2efe8; }
+  .store-list-row .store-list-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  #map { position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
+  #mapWrapper .leaflet-top.leaflet-left {
+    margin-top: calc(10px + env(safe-area-inset-top));
+    margin-left: calc(10px + env(safe-area-inset-left));
+  }
+  #mapWrapper .leaflet-bottom.leaflet-right {
+    margin-bottom: calc(10px + env(safe-area-inset-bottom));
+    margin-right: calc(10px + env(safe-area-inset-right));
+  }
+  .leaflet-popup-content { font-size: 13px; line-height: 1.6; min-width: 180px; }
+  .popup-status {
+    display: inline-block;
+    margin-top: 4px;
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-size: 11px;
+    color: white;
+  }
+  select.status-select {
+    margin-top: 6px;
+    font-size: 12px;
+    padding: 3px 6px;
+    border-radius: 4px;
+    border: 1px solid var(--line);
+    width: 100%;
+  }
+  #emptyNotice {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    background: var(--panel);
+    padding: 20px 26px;
+    border-radius: 10px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.12);
+    font-size: 13px;
+    color: var(--muted);
+    text-align: center;
+    z-index: 500;
+    max-width: 280px;
+  }
+  #geoProgress {
+    position: absolute;
+    bottom: calc(14px + env(safe-area-inset-bottom)); left: calc(14px + env(safe-area-inset-left));
+    background: var(--panel);
+    padding: 8px 14px;
+    border-radius: 8px;
+    box-shadow: 0 1px 6px rgba(0,0,0,0.15);
+    font-size: 12px;
+    z-index: 500;
+    display: none;
+  }
+
+  #passwordGate {
+    position: fixed; inset: 0;
+    background: var(--paper);
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  #passwordGate .box {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 28px 26px;
+    max-width: 300px;
+    width: 100%;
+    box-shadow: 0 2px 16px rgba(0,0,0,0.08);
+    text-align: center;
+  }
+  #passwordGate h2 {
+    font-size: 15px;
+    margin: 0 0 6px;
+  }
+  #passwordGate p {
+    font-size: 12px;
+    color: var(--muted);
+    margin: 0 0 16px;
+  }
+  #passwordGate input {
+    width: 100%;
+    padding: 9px 10px;
+    font-size: 14px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    margin-bottom: 10px;
+    box-sizing: border-box;
+  }
+  #passwordGate button {
+    width: 100%;
+    padding: 9px;
+    font-size: 14px;
+    background: var(--ink);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  #passwordGate .error {
+    color: var(--todo);
+    font-size: 12px;
+    margin-top: 8px;
+    display: none;
+  }
+
+  /* タッチ操作(スマホ・タブレット)向けに、タップ領域を広げる */
+  @media (pointer: coarse) {
+    .filter-row { padding: 10px 6px; font-size: 14px; }
+    .dot { width: 14px; height: 14px; }
+    .file-label { padding: 10px 16px; font-size: 13px; }
+    button.secondary { padding: 10px 14px; font-size: 13px; }
+    select.status-select { padding: 8px 10px; font-size: 14px; }
+    .leaflet-popup-content select.status-select,
+    .leaflet-popup-content input[type="text"] { padding: 8px; font-size: 14px; }
+    .leaflet-popup-content button.secondary { padding: 8px 14px; }
+  }
+
+  /* スマホ幅では、サイドバーを地図の上に重なるドロワー(引き出し式パネル)にする */
+  #sidebarToggle {
+    display: none;
+    background: none;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 16px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  #sidebarOverlay {
+    display: none;
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.35);
+    z-index: 900;
+  }
+  @media (max-width: 720px) {
+    #sidebarToggle { display: inline-block; }
+    header .sub { display: none; } /* スマホでは説明文を省略して省スペース化 */
+    .layout { position: relative; }
+    #sidebar {
+      position: absolute;
+      top: 0; left: 0; bottom: 0;
+      width: 85%;
+      max-width: 340px;
+      z-index: 950;
+      transform: translateX(-105%);
+      transition: transform 0.25s ease;
+      box-shadow: 3px 0 16px rgba(0,0,0,0.25);
+    }
+    #sidebar.open { transform: translateX(0); }
+    #sidebarOverlay.show { display: block; }
+    #map { }
+  }
+</style>
+</head>
+<body>
+
+<div id="passwordGate">
+  <div class="box">
+    <h2>新規店舗MAP</h2>
+    <p>合言葉を入力してください</p>
+    <input type="password" id="passwordInput" placeholder="合言葉" autocomplete="off">
+    <button id="passwordSubmit">開く</button>
+    <div class="error" id="passwordError">違います。もう一度お試しください。</div>
+  </div>
+</div>
+
+<header>
+  <div style="display:flex; align-items:center; gap:10px;">
+    <button id="sidebarToggle" aria-label="メニューを開く">☰</button>
+    <div>
+      <h1>新規店舗MAP</h1>
+      <div class="sub">自治体の食品営業許可・届出データから新規店舗を地図表示。顧客リストを追加すると既存客/新規の自動判定が有効になります。</div>
+    </div>
+  </div>
+  <div class="sub" id="lastUpdate"></div>
+</header>
+
+<div class="layout">
+  <div id="sidebarOverlay"></div>
+  <div id="sidebar">
+
+    <section>
+      <h2>0. 対象地域</h2>
+      <select id="areaSelect" class="status-select" style="width:100%; padding:6px 8px;">
+        <option value="">地域を選択(全体表示)</option>
+      </select>
+      <div class="hint" id="areaLink"></div>
+      <div class="hint">データを1件でも読み込んだ区には✓が付きます(プルダウン内)。</div>
+      <div class="hint" id="completedAreasBox" style="margin-top:8px; display:none;">
+        <strong style="color:var(--won);">読み込み済みの区:</strong>
+        <span id="completedAreasList" style="color:var(--won); font-weight:600;"></span>
+      </div>
+      <div id="shibuyaAutoBox" style="display:none; margin-top:8px;">
+        <button class="secondary" id="shibuyaFetchBtn" style="width:100%;">渋谷区オープンデータを自動取得</button>
+        <div class="status" id="shibuyaFetchStatus"></div>
+      </div>
+      <div class="hint" style="margin-top:8px;">
+        区市町村ごとの統一データ公開APIは現状ないため、選択すると地図の表示範囲が
+        自動で切り替わり、その区の公開ページを探す検索リンクが表示されます。
+        データ自体はリンク先で確認し、下の「1. 自治体データ」からCSVを読み込んでください。
+      </div>
+    </section>
+
+    <section>
+      <h2>1. 自治体データ(新規許可情報)</h2>
+      <div class="upload-box">
+        <label class="file-label">CSVを選択<input type="file" id="storeFileInput" accept=".csv"></label>
+        <button class="secondary" id="loadSampleBtn" style="margin-left:6px;">サンプルを読み込む</button>
+        <div class="status" id="storeFileStatus">未読み込み</div>
+        <div class="hint">列: 店舗名, 住所, 許可年月日, 業種 (緯度・経度があれば自動でそれを使用。無ければ住所から自動でジオコーディングします)</div>
+        <label style="display:flex; align-items:center; gap:6px; margin-top:8px; font-size:12px; flex-wrap:wrap;">
+          許可日が
+          <input type="date" id="dateFromInput" style="padding:3px 4px; font-size:12px;">
+          〜
+          <input type="date" id="dateToInput" style="padding:3px 4px; font-size:12px;">
+          のものだけを読み込む
+        </label>
+        <div class="hint">全期間の登録簿(渋谷区データなど)を読み込む場合、これで期間を絞り込みます。開始日を大きく過去にすれば「何年か前から」の範囲でも指定できます。両方空欄にすると絞り込みなし。</div>
+      </div>
+    </section>
+
+    <section>
+      <h2>2. 顧客リスト(任意・後から追加可)</h2>
+      <div class="upload-box">
+        <label class="file-label">CSVを選択<input type="file" id="customerFileInput" accept=".csv"></label>
+        <div class="status" id="customerFileStatus">未読み込み(すべて「新規」として扱われます)</div>
+        <div class="hint">列: 店舗名, 住所。読み込むと店舗名・住所を突合し、既存客ピンを自動で色分けします。</div>
+      </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <section>
+      <h2>表示フィルタ</h2>
+      <label class="filter-row"><input type="checkbox" data-key="既存客" checked><span class="dot" style="background:var(--existing)"></span>既存客<span class="count" id="c-既存客">0</span></label>
+      <div class="divider" style="margin:8px 0;"></div>
+      <label class="filter-row"><input type="checkbox" data-key="未着手" checked><span class="dot" style="background:var(--todo)"></span>新規・未着手<span class="count" id="c-未着手">0</span></label>
+      <label class="filter-row"><input type="checkbox" data-key="アプローチ中" checked><span class="dot" style="background:var(--approach)"></span>新規・アプローチ中<span class="count" id="c-アプローチ中">0</span></label>
+      <label class="filter-row"><input type="checkbox" data-key="アプローチ中（名刺済）" checked><span class="dot" style="background:#2c9aa0"></span>新規・アプローチ中（名刺済）<span class="count" id="c-アプローチ中（名刺済）">0</span></label>
+      <label class="filter-row"><input type="checkbox" data-key="商談中" checked><span class="dot" style="background:var(--nego)"></span>新規・商談中<span class="count" id="c-商談中">0</span></label>
+      <label class="filter-row"><input type="checkbox" data-key="門前払い" checked><span class="dot" style="background:var(--excluded)"></span>新規・門前払い<span class="count" id="c-門前払い">0</span></label>
+    </section>
+
+    <div class="divider"></div>
+
+    <section>
+      <h2>店舗一覧</h2>
+      <input type="text" id="storeSearchInput" placeholder="店舗名・住所で検索" style="width:100%; padding:6px 8px; font-size:13px; border:1px solid var(--line); border-radius:6px; margin-bottom:8px;">
+      <div id="storeListContainer" style="max-height:260px; overflow-y:auto; border:1px solid var(--line); border-radius:8px;"></div>
+      <div class="hint">名前をタップすると、その店舗のピンの位置に地図が移動します。</div>
+    </section>
+
+    <div class="divider"></div>
+
+    <section>
+      <h2>データ書き出し</h2>
+      <button class="secondary" id="exportBtn">現在の状態をCSVで保存</button>
+      <div class="hint">ステータスを更新した内容を含めて書き出せます。次回はこのCSVを「1. 自治体データ」として読み込めばステータスが引き継がれます。</div>
+    </section>
+
+  </div>
+
+  <div id="mapWrapper" style="position:relative; flex:1;">
+    <div id="map"></div>
+    <div id="emptyNotice">左のパネルから自治体の新規許可データ(CSV)を読み込むか、「サンプルを読み込む」で動作を確認してください。</div>
+    <div id="geoProgress"></div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script>
+  // --- 合言葉ゲート ---------------------------------------------------
+  // これは「知らない人が偶然URLを開けないようにする」ための簡易的な仕組みで、
+  // ページのソースを見れば誰でも突破できる本物のセキュリティではありません。
+  // 合言葉を変更したい場合は、下の SITE_PASSWORD の文字列を書き換えてください。
+  const SITE_PASSWORD = 'wakuwakudane!20260827';
+
+  (function () {
+    const gate = document.getElementById('passwordGate');
+    const input = document.getElementById('passwordInput');
+    const submitBtn = document.getElementById('passwordSubmit');
+    const errorEl = document.getElementById('passwordError');
+
+    if (sessionStorage.getItem('shinkiTenpoMapUnlocked') === 'yes') {
+      gate.style.display = 'none';
+      return;
+    }
+
+    function tryUnlock() {
+      if (input.value === SITE_PASSWORD) {
+        sessionStorage.setItem('shinkiTenpoMapUnlocked', 'yes');
+        gate.style.display = 'none';
+      } else {
+        errorEl.style.display = 'block';
+        input.value = '';
+        input.focus();
+      }
+    }
+    submitBtn.addEventListener('click', tryUnlock);
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') tryUnlock(); });
+  })();
+  // ---------------------------------------------------------------------
+
+  const COLORS = {
+    '既存客': '#3457d5',
+    '未着手': '#d64545',
+    'アプローチ中': '#e0a52c',
+    'アプローチ中（名刺済）': '#2c9aa0',
+    '商談中': '#e07b1f',
+    '門前払い': '#9aa0a6'
+  };
+  const STATUS_OPTIONS = ['未着手', 'アプローチ中', 'アプローチ中（名刺済）', '商談中', '門前払い'];
+
+  const SAMPLE_STORES_CSV =
+`店舗名,住所,許可年月日,業種,緯度,経度
+カフェ・ノワ,東京都渋谷区代々木2-5,2026-08-01,飲食店営業,35.6835,139.7020
+ラーメン一心,東京都新宿区高田馬場3-4,2026-08-03,飲食店営業,35.7130,139.7040
+ビストロ・ソレイユ,東京都港区六本木5-1,2026-08-05,飲食店営業,35.6627,139.7315
+お弁当ふくや,東京都品川区大井1-2,2026-08-06,そうざい製造業,35.6045,139.7315
+中華飯店 龍,東京都豊島区池袋2-6,2026-08-10,飲食店営業,35.7300,139.7110
+すし処 波音,東京都墨田区錦糸町1-3,2026-08-11,飲食店営業,35.6970,139.8140
+パスタ工房,東京都目黒区中目黒1-4,2026-08-15,飲食店営業,35.6440,139.6990
+カレー食堂 陽,東京都世田谷区三軒茶屋2-2,2026-08-18,飲食店営業,35.6435,139.6695
+喫茶ひかり,東京都渋谷区神南1-1,2026-08-19,喫茶店営業,35.6620,139.7015
+和食処 蓮,東京都新宿区西新宿2-3,2026-08-20,飲食店営業,35.6905,139.6995`;
+
+  const SAMPLE_CUSTOMERS_CSV =
+`店舗名,住所,緯度,経度
+喫茶ひかり,東京都渋谷区神南1-1,35.6620,139.7015
+和食処 蓮,東京都新宿区西新宿2-3,35.6905,139.6995`;
+
+  let stores = []; // {name, address, lat, lng, type, status, permitDate, category}
+  let map, markers = [], geocodeCache = {};
+  let currentArea = '';
+  let lastRawRows = null; // 期間の絞り込み変更時に再フィルタするための元データ
+
+  // 東京23区+その他(多摩地域等)のおおよその中心座標(区役所付近)
+  const TOKYO_AREAS = [
+    { name: '千代田区', lat: 35.6938, lng: 139.7530 },
+    { name: '中央区', lat: 35.6706, lng: 139.7720 },
+    { name: '港区', lat: 35.6581, lng: 139.7515 },
+    { name: '新宿区', lat: 35.6938, lng: 139.7036 },
+    { name: '文京区', lat: 35.7080, lng: 139.7524 },
+    { name: '台東区', lat: 35.7128, lng: 139.7800 },
+    { name: '墨田区', lat: 35.7107, lng: 139.8015 },
+    { name: '江東区', lat: 35.6729, lng: 139.8172 },
+    { name: '品川区', lat: 35.6092, lng: 139.7301 },
+    { name: '目黒区', lat: 35.6414, lng: 139.6982 },
+    { name: '大田区', lat: 35.5614, lng: 139.7161 },
+    { name: '世田谷区', lat: 35.6464, lng: 139.6532 },
+    { name: '渋谷区', lat: 35.6620, lng: 139.7038 },
+    { name: '中野区', lat: 35.7074, lng: 139.6638 },
+    { name: '杉並区', lat: 35.6994, lng: 139.6364 },
+    { name: '豊島区', lat: 35.7261, lng: 139.7189 },
+    { name: '北区', lat: 35.7526, lng: 139.7336 },
+    { name: '荒川区', lat: 35.7360, lng: 139.7834 },
+    { name: '板橋区', lat: 35.7514, lng: 139.7093 },
+    { name: '練馬区', lat: 35.7357, lng: 139.6516 },
+    { name: '足立区', lat: 35.7750, lng: 139.8045 },
+    { name: '葛飾区', lat: 35.7434, lng: 139.8474 },
+    { name: '江戸川区', lat: 35.7066, lng: 139.8683 },
+    { name: 'その他(多摩地域等)', lat: 35.6895, lng: 139.4650 }
+  ];
+
+  // 地図のズーム倍率に応じて、ピンの半径を計算する
+  // 広域表示(ズームアウト)では小さく密集を避け、拡大するとタップしやすい大きさにする
+  function markerRadiusForZoom(zoom) {
+    const isCoarsePointer = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+    const minR = isCoarsePointer ? 4 : 3;
+    const maxR = isCoarsePointer ? 16 : 11;
+    const r = minR + (zoom - 11) * (isCoarsePointer ? 2.4 : 1.6);
+    return Math.max(minR, Math.min(maxR, r));
+  }
+
+  function initMap() {
+    map = L.map('map', { zoomControl: true, preferCanvas: true }).setView([35.6812, 139.7671], 12);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors',
+      maxZoom: 19
+    }).addTo(map);
+
+    // ズーム操作のたびに、既存の全ピンの大きさを更新する(作り直しはしない)
+    map.on('zoomend', () => {
+      const r = markerRadiusForZoom(map.getZoom());
+      markers.forEach(m => m.setRadius(r));
+    });
+
+    const select = document.getElementById('areaSelect');
+    TOKYO_AREAS.forEach(a => {
+      const o = document.createElement('option');
+      o.value = a.name; o.textContent = a.name;
+      select.appendChild(o);
+    });
+    select.addEventListener('change', () => {
+      currentArea = select.value;
+      const linkEl = document.getElementById('areaLink');
+      const shibuyaBox = document.getElementById('shibuyaAutoBox');
+      shibuyaBox.style.display = currentArea === '渋谷区' ? 'block' : 'none';
+      if (!currentArea) {
+        linkEl.innerHTML = '';
+        map.setView([35.6812, 139.7671], 12);
+      } else {
+        const area = TOKYO_AREAS.find(a => a.name === currentArea);
+        map.setView([area.lat, area.lng], 14);
+        if (currentArea === '渋谷区') {
+          linkEl.innerHTML = `<a href="${SHIBUYA_DATASET_PAGE_URL}" target="_blank" rel="noopener">渋谷区オープンデータのページを見る ↗</a>`;
+        } else {
+          const q = encodeURIComponent(currentArea + ' 食品衛生 営業許可 一覧 保健所');
+          linkEl.innerHTML = `<a href="https://www.google.com/search?q=${q}" target="_blank" rel="noopener">${currentArea}の公開ページを検索 ↗</a>`;
+        }
+      }
+      render();
+    });
+  }
+
+  // --- 渋谷区: 実在するオープンデータ(ArcGIS Hub)からの自動取得 ---
+  // データセット「食品営業許可施設一覧」(渋谷区公式オープンデータサイトで確認済み)
+  const SHIBUYA_ITEM_ID = '172833e4c2dc4126bfec0406a3ada2fb';
+  const SHIBUYA_DATASET_PAGE_URL = 'https://city-shibuya-data.opendata.arcgis.com/items/172833e4c2dc4126bfec0406a3ada2fb';
+  // ArcGIS Hubの標準ダウンロードAPI(このサイト固有ではなく、ArcGIS Hub全般で使われる公開APIパターン)
+  const SHIBUYA_CSV_API_CANDIDATES = [
+    `https://city-shibuya-data.opendata.arcgis.com/api/download/v1/items/${SHIBUYA_ITEM_ID}/csv?layers=0`,
+    `https://opendata.arcgis.com/api/v3/datasets/${SHIBUYA_ITEM_ID}_0/downloads/data?format=csv&spatialRefId=4326`
+  ];
+
+  // CSVの列名は自治体側の表記ゆれがあるため、候補の中から一致するものを探す
+  function pickField(row, candidates) {
+    const keys = Object.keys(row);
+    for (const cand of candidates) {
+      const hit = keys.find(k => k.replace(/\s/g, '') === cand);
+      if (hit) return row[hit];
+    }
+    return '';
+  }
+
+  async function fetchShibuyaData() {
+    const statusEl = document.getElementById('shibuyaFetchStatus');
+    statusEl.textContent = '取得中…';
+    statusEl.className = 'status';
+
+    let text = null;
+    let lastError = null;
+    for (const url of SHIBUYA_CSV_API_CANDIDATES) {
+      try {
+        const res = await fetch(url);
+        if (!res.ok) { lastError = `HTTP ${res.status}`; continue; }
+        text = await res.text();
+        if (text) break;
+      } catch (e) {
+        lastError = e.message || String(e);
+      }
+    }
+
+    if (!text) {
+      statusEl.textContent =
+        `自動取得に失敗しました(${lastError || '不明なエラー'})。ブラウザの制限で外部サイトへの` +
+        `通信がブロックされている可能性があります。上の「渋谷区オープンデータのページを見る」から` +
+        `手動でCSVをダウンロードし、「1. 自治体データ」欄から読み込んでください。`;
+      statusEl.style.color = 'var(--todo)';
+      return;
+    }
+
+    Papa.parse(text, {
+      header: true,
+      skipEmptyLines: true,
+      complete: results => {
+        if (results.data.length === 0) {
+          statusEl.textContent = 'データが空でした。';
+          statusEl.style.color = 'var(--todo)';
+          return;
+        }
+        const before = stores.filter(s => s.type === '新規').length;
+        loadStoreRows(results.data);
+        const after = stores.filter(s => s.type === '新規').length;
+        statusEl.textContent = `渋谷区オープンデータ(全${results.data.length}件)から ${after - before} 件を新規として取り込みました`;
+        statusEl.className = 'status ok';
+      }
+    });
+  }
+
+  document.getElementById('shibuyaFetchBtn').addEventListener('click', fetchShibuyaData);
+  document.getElementById('dateFromInput').addEventListener('input', () => {
+    if (lastRawRows) loadStoreRows(lastRawRows);
+  });
+  document.getElementById('dateToInput').addEventListener('input', () => {
+    if (lastRawRows) loadStoreRows(lastRawRows);
+  });
+
+  // 初期値: 開始日=30日前、終了日=今日
+  (function setDefaultDateRange() {
+    const today = new Date();
+    const from = new Date(today.getTime() - 30 * 86400000);
+    const fmt = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    document.getElementById('dateFromInput').value = fmt(from);
+    document.getElementById('dateToInput').value = fmt(today);
+  })();
+
+  function normalizeKey(name, address) {
+    const norm = s => String(s || '')
+      .replace(/[\u3000\s]/g, '')
+      .replace(/[Ａ-Ｚａ-ｚ０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
+      .toLowerCase();
+    return { name: norm(name), address: norm(address) };
+  }
+
+  function matchCustomer(name, address, customerList) {
+    const t = normalizeKey(name, address);
+    return customerList.some(c => {
+      const k = normalizeKey(c.name, c.address);
+      if (k.name === t.name && k.address === t.address) return true;
+      return k.name === t.name && t.address && k.address &&
+        (t.address.indexOf(k.address) === 0 || k.address.indexOf(t.address) === 0);
+    });
+  }
+
+  // --- ジオコーディング (Nominatim / OpenStreetMap、APIキー不要・要レート制限順守) ---
+  async function geocode(address) {
+    if (geocodeCache[address]) return geocodeCache[address];
+    try {
+      const url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=jp&q=' + encodeURIComponent(address);
+      const res = await fetch(url, { headers: { 'Accept-Language': 'ja' } });
+      const data = await res.json();
+      if (data && data.length > 0) {
+        const result = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+        geocodeCache[address] = result;
+        return result;
+      }
+    } catch (e) { console.warn('geocode failed', address, e); }
+    return null;
+  }
+
+  async function geocodeMissing(list) {
+    const targets = list.filter(s => !s.lat || !s.lng);
+    if (targets.length === 0) return;
+    const progressEl = document.getElementById('geoProgress');
+    progressEl.style.display = 'block';
+    let failCount = 0;
+    for (let i = 0; i < targets.length; i++) {
+      progressEl.textContent = `住所から位置情報を取得中… (${i + 1}/${targets.length})`;
+      const geo = await geocode(targets[i].address);
+      if (geo) { targets[i].lat = geo.lat; targets[i].lng = geo.lng; }
+      else { failCount++; }
+      await new Promise(r => setTimeout(r, 1100)); // Nominatim利用規約: 1req/秒程度に抑える
+    }
+    if (failCount > 0) {
+      progressEl.textContent = `${failCount}件の位置情報を取得できませんでした。CSVに緯度・経度の列を追加すると確実に表示されます。`;
+      progressEl.style.color = 'var(--todo)';
+      setTimeout(() => { progressEl.style.display = 'none'; progressEl.style.color = ''; }, 6000);
+    } else {
+      progressEl.style.display = 'none';
+    }
+    render();
+  }
+
+  function parseCsv(file, onDone) {
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: results => onDone(results.data)
+    });
+  }
+
+  function parseJapaneseDate(s) {
+    if (!s) return null;
+    const m = String(s).match(/(\d{4})[\/\-年](\d{1,2})[\/\-月](\d{1,2})/);
+    if (!m) return null;
+    return new Date(parseInt(m[1]), parseInt(m[2]) - 1, parseInt(m[3]));
+  }
+
+  function mapRawRow(r) {
+    const name = pickField(r, ['店舗名', '名称', '施設名', '屋号', '営業所名称', '施設名称']);
+    const address = pickField(r, ['住所', '所在地', '施設所在地', '施設所在地_連結表記', '所在地(住所)']);
+    const lat = parseFloat(pickField(r, ['緯度', 'lat', 'Y', 'y']));
+    const lng = parseFloat(pickField(r, ['経度', 'lng', 'lon', 'X', 'x']));
+    const permitDateStr = pickField(r, ['許可年月日', '許可日', '届出年月日', '許可開始日もしくは届出受理日', '初回許可日', '許可決定日']);
+    const status = pickField(r, ['営業ステータス']);
+    const closureDate = pickField(r, ['廃業日']);
+    return {
+      name, address,
+      permitDate: permitDateStr || '',
+      category: pickField(r, ['業種', '営業種別', '営業の種類', '営業の種類もしくは営業の形態']),
+      lat: isNaN(lat) ? null : lat,
+      lng: isNaN(lng) ? null : lng,
+      isClosed: (status && status.indexOf('廃業') !== -1) || !!closureDate,
+      permitDateObj: parseJapaneseDate(permitDateStr)
+    };
+  }
+
+  function loadStoreRows(rawRows) {
+    lastRawRows = rawRows;
+    const fromVal = document.getElementById('dateFromInput').value; // "YYYY-MM-DD" or ""
+    const toVal = document.getElementById('dateToInput').value;
+    // <input type="date"> の値はローカル日付として解釈する(時刻情報なし)
+    const fromDate = fromVal ? new Date(fromVal + 'T00:00:00') : null;
+    const toDate = toVal ? new Date(toVal + 'T23:59:59') : null;
+
+    let mapped = rawRows.map(mapRawRow).filter(r => r.name);
+    const totalBeforeFilter = mapped.length;
+
+    mapped = mapped.filter(r => !r.isClosed);
+    if (fromDate) {
+      mapped = mapped.filter(r => !r.permitDateObj || r.permitDateObj >= fromDate);
+    }
+    if (toDate) {
+      mapped = mapped.filter(r => !r.permitDateObj || r.permitDateObj <= toDate);
+    }
+
+    const customerList = stores.filter(s => s.type === '既存客').map(s => ({ name: s.name, address: s.address }));
+    const newStores = mapped.map(r => {
+      const isExisting = matchCustomer(r.name, r.address, customerList);
+      return {
+        name: r.name, address: r.address,
+        permitDate: r.permitDate, category: r.category,
+        lat: r.lat, lng: r.lng,
+        type: isExisting ? '既存客' : '新規',
+        status: '未着手',
+        memoLog: []
+      };
+    });
+
+    stores = stores.filter(s => s.type === '既存客').concat(newStores);
+    document.getElementById('storeFileStatus').textContent =
+      `${newStores.length}件を読み込みました` +
+      (totalBeforeFilter > newStores.length ? `(全${totalBeforeFilter}件中、廃業/期間外を除外)` : '');
+    document.getElementById('storeFileStatus').classList.add('ok');
+    document.getElementById('emptyNotice').style.display = 'none';
+    render();
+    geocodeMissing(stores);
+  }
+
+  function loadCustomerRows(rows) {
+    const customers = rows.map(r => {
+      const lat = parseFloat(r['緯度'] || r['lat']);
+      const lng = parseFloat(r['経度'] || r['lng']);
+      return {
+        name: r['店舗名'] || r['name'] || '',
+        address: r['住所'] || r['address'] || '',
+        lat: isNaN(lat) ? null : lat,
+        lng: isNaN(lng) ? null : lng,
+        type: '既存客',
+        status: '',
+        memoLog: []
+      };
+    }).filter(c => c.name);
+
+    // 既存の新規店舗リストに対して再判定
+    stores = stores.filter(s => s.type !== '既存客-placeholder');
+    const nonCustomerStores = stores.filter(s => s.type !== '既存客' || !customers.some(c => matchCustomer(s.name, s.address, [c])));
+    stores.forEach(s => {
+      const isExisting = matchCustomer(s.name, s.address, customers);
+      if (isExisting) { s.type = '既存客'; s.status = ''; }
+    });
+
+    // 顧客マスタに緯度経度がある場合は、地図上にも既存客として追加(重複除く)
+    customers.forEach(c => {
+      const exists = stores.some(s => matchCustomer(s.name, s.address, [c]));
+      if (!exists) stores.push(c);
+    });
+
+    document.getElementById('customerFileStatus').textContent = `${customers.length}件の顧客と突合しました`;
+    document.getElementById('customerFileStatus').classList.add('ok');
+    render();
+    geocodeMissing(stores);
+  }
+
+  // 1件のピンの吹き出し(ポップアップ)の中身を作る。クリックされた時にだけ呼ばれる(重い処理を毎回全ピン分やらない)。
+  function buildPopupContent(store) {
+    const key = store.type === '既存客' ? '既存客' : store.status;
+    const popupDiv = document.createElement('div');
+    const statusLabel = store.type === '既存客' ? '既存客' : `新規・${store.status}`;
+    popupDiv.innerHTML =
+      `<strong>${escapeHtml(store.name)}</strong><br>${escapeHtml(store.address)}` +
+      (store.category ? `<br><span style="color:#857f73">${escapeHtml(store.category)}${store.permitDate ? ' / ' + escapeHtml(store.permitDate) : ''}</span>` : '') +
+      `<br><span class="popup-status" style="background:${COLORS[key] || COLORS['門前払い']}">${statusLabel}</span>`;
+
+    if (store.type !== '既存客') {
+      const select = document.createElement('select');
+      select.className = 'status-select';
+      STATUS_OPTIONS.forEach(opt => {
+        const o = document.createElement('option');
+        o.value = opt; o.textContent = opt;
+        if (opt === store.status) o.selected = true;
+        select.appendChild(o);
+      });
+      select.addEventListener('change', () => {
+        store.status = select.value;
+        updateSingleMarker(store);
+        if (store._marker) store._marker.setPopupContent(buildPopupContent(store));
+      });
+      popupDiv.appendChild(select);
+    }
+
+    const memoBox = document.createElement('div');
+    memoBox.style.marginTop = '6px';
+
+    const logBox = document.createElement('div');
+    logBox.style.cssText = 'max-height:90px; overflow-y:auto; font-size:11px; color:var(--muted); border:1px solid var(--line); border-radius:4px; padding:4px 6px; margin-bottom:4px; background:#faf9f6;';
+
+    function renderMemoLog() {
+      if (!store.memoLog || store.memoLog.length === 0) {
+        logBox.textContent = 'メモはまだありません';
+      } else {
+        logBox.innerHTML = '';
+        store.memoLog.slice().reverse().forEach(entry => {
+          const line = document.createElement('div');
+          line.style.marginBottom = '3px';
+          const timeSpan = document.createElement('span');
+          timeSpan.style.cssText = 'color:var(--ink); font-weight:600;';
+          timeSpan.textContent = entry.time + ' ';
+          line.appendChild(timeSpan);
+          line.appendChild(document.createTextNode(entry.text));
+          logBox.appendChild(line);
+        });
+      }
+    }
+    renderMemoLog();
+
+    const inputRow = document.createElement('div');
+    inputRow.style.cssText = 'display:flex; gap:4px;';
+    const memoInput = document.createElement('input');
+    memoInput.type = 'text';
+    memoInput.placeholder = 'メモを追加してEnter';
+    memoInput.style.cssText = 'flex:1; font-size:12px; padding:3px 6px; border:1px solid var(--line); border-radius:4px;';
+    const addBtn = document.createElement('button');
+    addBtn.textContent = '追加';
+    addBtn.className = 'secondary';
+    addBtn.style.cssText = 'font-size:11px; padding:3px 10px;';
+    const addMemo = () => {
+      const text = memoInput.value.trim();
+      if (!text) return;
+      if (!store.memoLog) store.memoLog = [];
+      const now = new Date();
+      const pad = n => String(n).padStart(2, '0');
+      const time = `${now.getFullYear()}/${pad(now.getMonth() + 1)}/${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+      store.memoLog.push({ time, text });
+      memoInput.value = '';
+      renderMemoLog();
+    };
+    addBtn.addEventListener('click', addMemo);
+    memoInput.addEventListener('keydown', e => { if (e.key === 'Enter') addMemo(); });
+    inputRow.appendChild(memoInput);
+    inputRow.appendChild(addBtn);
+
+    memoBox.appendChild(logBox);
+    memoBox.appendChild(inputRow);
+    popupDiv.appendChild(memoBox);
+
+    return popupDiv;
+  }
+
+  // ステータス変更などで1件のピンだけ更新する(全ピンの作り直しをしない軽い処理)
+  function updateSingleMarker(store) {
+    const key = store.type === '既存客' ? '既存客' : store.status;
+    if (store._marker) {
+      store._marker.setStyle({ fillColor: COLORS[key] || COLORS['門前払い'] });
+    }
+    refreshSidebarInfo();
+  }
+
+  // サイドバーの件数表示・区の済マーク・店舗一覧だけを更新する(ピンの作り直しはしない)
+  function refreshSidebarInfo() {
+    const checked = new Set(
+      Array.from(document.querySelectorAll('#sidebar .filter-row input:checked')).map(cb => cb.dataset.key)
+    );
+    const counts = {};
+    stores.forEach(store => {
+      if (!store.lat || !store.lng) return;
+      if (currentArea && store.address && store.address.indexOf(currentArea) === -1) return;
+      const key = store.type === '既存客' ? '既存客' : store.status;
+      counts[key] = (counts[key] || 0) + 1;
+    });
+    STATUS_OPTIONS.concat('既存客').forEach(key => {
+      const el = document.getElementById('c-' + key);
+      if (el) el.textContent = counts[key] || 0;
+    });
+    document.getElementById('lastUpdate').textContent =
+      stores.length > 0 ? '表示件数: ' + stores.filter(s => s.lat && s.lng).length + '件' : '';
+    updateAreaOptionsMarks();
+    renderStoreList();
+    return checked;
+  }
+
+  function render() {
+    if (!map) return;
+    markers.forEach(m => map.removeLayer(m));
+    markers = [];
+
+    const checked = refreshSidebarInfo();
+
+    stores.forEach(store => {
+      if (!store.lat || !store.lng) return;
+      if (currentArea && store.address && store.address.indexOf(currentArea) === -1) return;
+      const key = store.type === '既存客' ? '既存客' : store.status;
+      if (!checked.has(key)) return;
+
+      const isCoarsePointer = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+      const marker = L.circleMarker([store.lat, store.lng], {
+        radius: markerRadiusForZoom(map.getZoom()),
+        fillColor: COLORS[key] || COLORS['門前払い'],
+        color: '#ffffff',
+        weight: isCoarsePointer ? 3 : 2,
+        fillOpacity: 1
+      }).addTo(map);
+      store._marker = marker;
+
+      // 吹き出しの中身は、クリックされて開かれる瞬間に初めて作る(関数を渡す=遅延生成)
+      marker.bindPopup(() => buildPopupContent(store));
+      markers.push(marker);
+    });
+
+    if (markers.length > 800) {
+      const warn = document.createElement('div');
+      warn.id = 'perfWarning';
+      warn.style.cssText = 'position:absolute; top:10px; left:50%; transform:translateX(-50%); background:#fff3e0; color:#8a5a1a; border:1px solid #e0a52c; padding:6px 14px; border-radius:8px; font-size:12px; z-index:600;';
+      warn.textContent = `${markers.length}件のピンを表示中です。動作が重い場合は許可日の期間指定を短くして絞り込んでください。`;
+      const old = document.getElementById('perfWarning');
+      if (old) old.remove();
+      document.getElementById('mapWrapper').appendChild(warn);
+    } else {
+      const old = document.getElementById('perfWarning');
+      if (old) old.remove();
+    }
+  }
+
+  function escapeHtml(s) {
+    const div = document.createElement('div');
+    div.textContent = String(s || '');
+    return div.innerHTML;
+  }
+
+  // 店舗一覧(サイドバー)を、現在の絞り込み条件+検索語に合わせて再生成する
+  function renderStoreList() {
+    const container = document.getElementById('storeListContainer');
+    const searchInput = document.getElementById('storeSearchInput');
+    if (!container || !searchInput) return;
+
+    const checked = new Set(
+      Array.from(document.querySelectorAll('#sidebar .filter-row input:checked')).map(cb => cb.dataset.key)
+    );
+    const rawSearch = (searchInput.value || '').trim();
+    const normSearch = rawSearch.replace(/[\u3000\s]/g, '').toLowerCase();
+
+    const visible = stores.filter(store => {
+      if (!store.lat || !store.lng) return false;
+      if (currentArea && store.address && store.address.indexOf(currentArea) === -1) return false;
+      const key = store.type === '既存客' ? '既存客' : store.status;
+      if (!checked.has(key)) return false;
+      if (normSearch) {
+        const target = (store.name + store.address).replace(/[\u3000\s]/g, '').toLowerCase();
+        if (target.indexOf(normSearch) === -1) return false;
+      }
+      return true;
+    });
+
+    visible.sort((a, b) => a.name.localeCompare(b.name, 'ja'));
+
+    container.innerHTML = '';
+    if (visible.length === 0) {
+      container.innerHTML = '<div class="hint" style="padding:8px 10px;">該当する店舗がありません</div>';
+      return;
+    }
+
+    visible.forEach(store => {
+      const key = store.type === '既存客' ? '既存客' : store.status;
+      const row = document.createElement('div');
+      row.className = 'store-list-row';
+      row.innerHTML =
+        `<span class="dot" style="background:${COLORS[key] || COLORS['門前払い']}; flex-shrink:0;"></span>` +
+        `<span class="store-list-name">${escapeHtml(store.name)}</span>`;
+      row.addEventListener('click', () => {
+        if (store._marker) {
+          map.setView([store.lat, store.lng], 17);
+          store._marker.openPopup();
+        }
+        if (window.matchMedia('(max-width: 720px)').matches) closeSidebar();
+      });
+      container.appendChild(row);
+    });
+  }
+
+  // どの区のデータを読み込み済みかを、店舗住所から判定してプルダウン+一覧に反映する
+  function updateAreaOptionsMarks() {
+    const select = document.getElementById('areaSelect');
+    if (!select) return;
+    const completed = [];
+    Array.from(select.options).forEach(opt => {
+      if (!opt.value) return; // 「地域を選択」のプレースホルダーは対象外
+      const areaName = opt.value;
+      let hasData;
+      if (areaName === 'その他(多摩地域等)') {
+        const wardNames = TOKYO_AREAS.filter(a => a.name !== 'その他(多摩地域等)').map(a => a.name);
+        hasData = stores.some(s => s.address && !wardNames.some(w => s.address.indexOf(w) !== -1));
+      } else {
+        hasData = stores.some(s => s.address && s.address.indexOf(areaName) !== -1);
+      }
+      opt.textContent = (hasData ? '✓ ' : '') + areaName;
+      if (hasData) completed.push(areaName);
+    });
+
+    const box = document.getElementById('completedAreasBox');
+    const list = document.getElementById('completedAreasList');
+    if (completed.length > 0) {
+      box.style.display = 'block';
+      list.textContent = completed.join('、');
+    } else {
+      box.style.display = 'none';
+    }
+  }
+
+  // --- イベント設定 ---
+  document.getElementById('storeFileInput').addEventListener('change', e => {
+    if (e.target.files[0]) parseCsv(e.target.files[0], loadStoreRows);
+  });
+  document.getElementById('customerFileInput').addEventListener('change', e => {
+    if (e.target.files[0]) parseCsv(e.target.files[0], loadCustomerRows);
+  });
+  document.getElementById('loadSampleBtn').addEventListener('click', () => {
+    Papa.parse(SAMPLE_STORES_CSV, { header: true, skipEmptyLines: true, complete: r => loadStoreRows(r.data) });
+  });
+  document.querySelectorAll('#sidebar .filter-row input').forEach(cb => {
+    cb.addEventListener('change', render);
+  });
+  document.getElementById('storeSearchInput').addEventListener('input', renderStoreList);
+  document.getElementById('exportBtn').addEventListener('click', () => {
+    const rows = stores.map(s => ({
+      店舗名: s.name, 住所: s.address, 許可年月日: s.permitDate || '', 業種: s.category || '',
+      緯度: s.lat || '', 経度: s.lng || '',
+      区分: s.type, ステータス: s.type === '既存客' ? '' : s.status,
+      メモ: (s.memoLog || []).map(e => `[${e.time}] ${e.text}`).join('\n')
+    }));
+    const csv = Papa.unparse(rows);
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = '新規店舗MAP_' + new Date().toISOString().slice(0,10) + '.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  initMap();
+  render();
+
+  // スマホ用サイドバー(ドロワー)の開閉
+  const sidebarToggle = document.getElementById('sidebarToggle');
+  const sidebarEl = document.getElementById('sidebar');
+  const sidebarOverlay = document.getElementById('sidebarOverlay');
+  function closeSidebar() {
+    sidebarEl.classList.remove('open');
+    sidebarOverlay.classList.remove('show');
+  }
+  sidebarToggle.addEventListener('click', () => {
+    sidebarEl.classList.toggle('open');
+    sidebarOverlay.classList.toggle('show');
+  });
+  sidebarOverlay.addEventListener('click', closeSidebar);
+
+  // Androidでの「アプリをインストール」を有効にするための最小限のService Worker登録
+  // (file://ではなくhttps://で公開した場合のみ有効。file://では単に無視されます)
+  if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+    navigator.serviceWorker.register('sw.js').catch(() => { /* 未公開環境などでは無視 */ });
+  }
+</script>
+</body>
+</html>
